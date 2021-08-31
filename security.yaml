@@ -1,0 +1,12 @@
+#WARNING! Do not apply this kube-system namespace.
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: default-deny-all
+spec:
+  policyTypes:
+  - Egress
+  podSelector: {}
+  egress: []
+...
+---

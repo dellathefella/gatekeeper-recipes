@@ -1,0 +1,86 @@
+#WARNING! Do not apply this kube-system namespace.
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: default-deny-all
+  labels:
+    owner: "test"
+spec:
+  policyTypes:
+  - Egress
+  podSelector: {}
+  egress: []
+...
+---
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabels
+  annotations:
+    description: Requires all resources to contain a specified label with a value
+      matching a provided regular expression.
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabels
+      validation:
+        # Schema for the `parameters` field
+        openAPIV3Schema:
+          type: object
+          properties:
+            message:
+              type: string
+            labels:
+              type: array
+              items:
+                type: object
+                properties:
+                  key:
+                    type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredlabels
+        get_message(parameters, _default) = msg {
+          not parameters.message
+          msg := _default
+        }
+        get_message(parameters, _default) = msg {
+          msg := parameters.message
+        }
+
+        violation[{"msg": msg, "details": {"missing_labels": missing}}] {
+          provided := {label | input.review.object.metadata.labels[label]}
+          required := {label | label := input.parameters.labels[_].key}
+          missing := required - provided
+          count(missing) > 0
+          def_msg := sprintf("you must provide labels: %v", [missing])
+          msg := get_message(input.parameters, def_msg)
+        }
+
+        violation[{"msg": msg,}] {
+          not input.review.object.metadata.labels[key] = "pcdm"
+          input.request.operation = "DELETE"          
+          def_msg := "You cannot modify resources created by PCDM"
+          msg := get_message(input.parameters, def_msg)
+        }
+
+
+...
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: all-must-have-owner
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+  parameters:
+    message: "All resources must have an `owner` label."
+    labels:
+      - key: owner
+...
+---
