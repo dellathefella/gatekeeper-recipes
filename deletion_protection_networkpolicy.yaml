@@ -1,12 +1,12 @@
 apiVersion: templates.gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
-  name: k8srequiredlabels
+  name: k8sprotectednetworkpolicy
 spec:
   crd:
     spec:
       names:
-        kind: K8sRequiredLabels
+        kind: K8sProtectedNetworkPolicy
       validation:
         # Schema for the `parameters` field
         openAPIV3Schema:
@@ -17,27 +17,28 @@ spec:
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |
-        package k8srequiredlabels
+        package k8sprotectednetworkpolicy
 
         # Throws violation if namespace deletion is attempted with annotation
          violation[{"msg": msg}] {
+            input.review.object.kind == "NetworkPolicy"
             operation := input.review.operation
             operation == "DELETE"
             annotation := input.review.object.metadata.annotations
             test := annotation["protected"] == "false"
             not test
-            msg := sprintf("you must provide annotation \"protected=false\" for namespace operation=%v DEBUG INFO annotation=%v,test=%v", [operation,annotation,test])
+            msg := sprintf("This is a protected network policy, you must provide annotation \"protected=false\" for NetworkPolicy operation=%v DEBUG INFO annotation=%v,test=%v", [operation,annotation,test])
          }
 ...
 ---
 apiVersion: constraints.gatekeeper.sh/v1beta1
-kind: K8sRequiredLabels
+kind: K8sProtectedNetworkPolicy
 metadata:
-  name: ns-must-have-gk
+  name: protected-network-policy-cannot-be-deleted
 spec:
   match:
     kinds:
-      - apiGroups: [""]
-        kinds: ["Namespace"]
+      - apiGroups: ["networking.k8s.io"]
+        kinds: ["NetworkPolicy"]
   parameters:
     annotations: ["protected"]

@@ -1,0 +1,43 @@
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8sprotectednamespace
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sProtectedNamespace
+      validation:
+        # Schema for the `parameters` field
+        openAPIV3Schema:
+          properties:
+            annotations:
+              type: array
+              items: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sprotectednamespace
+
+        # Throws violation if namespace deletion is attempted with annotation
+         violation[{"msg": msg}] {
+            operation := input.review.operation
+            operation == "DELETE"
+            annotation := input.review.object.metadata.annotations
+            test := annotation["protected"] == "false"
+            not test
+            msg := sprintf("This is a protected namespace, you must provide annotation \"protected=false\" for Namespace operation=%v DEBUG INFO annotation=%v,test=%v", [operation,annotation,test])
+         }
+...
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sProtectedNamespace
+metadata:
+  name: protected-namespace-policy-cannot-be-deleted
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+  parameters:
+    annotations: ["protected"]
